@@ -1,0 +1,367 @@
+{
+  "name": "Support Ticket Triage & Report",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "n1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const tickets = [\n {\n  \"id\": \"T-1001\",\n  \"customer\": \"Priya Sharma\",\n  \"subject\": \"Payment charged twice\",\n  \"message\": \"I was charged twice for my invoice this month. This is unacceptable, please refund urgently.\"\n },\n {\n  \"id\": \"T-1002\",\n  \"customer\": \"Rahul Verma\",\n  \"subject\": \"App crashes on login\",\n  \"message\": \"The app crashes every time I try to login. It is not working since the update and I am frustrated.\"\n },\n {\n  \"id\": \"T-1003\",\n  \"customer\": \"Anita Desai\",\n  \"subject\": \"Where is my order?\",\n  \"message\": \"My order has not arrived yet. Can you share the delivery status?\"\n },\n {\n  \"id\": \"T-1004\",\n  \"customer\": \"Karan Mehta\",\n  \"subject\": \"Great support, thanks\",\n  \"message\": \"Thanks for the quick help yesterday. The team was great and very helpful.\"\n },\n {\n  \"id\": \"T-1005\",\n  \"customer\": \"Sneha Iyer\",\n  \"subject\": \"Reset password\",\n  \"message\": \"I forgot my password and cannot access my account. Please help me reset it.\"\n },\n {\n  \"id\": \"T-1006\",\n  \"customer\": \"Vikram Singh\",\n  \"subject\": \"Dashboard is down\",\n  \"message\": \"Our whole team cannot use the dashboard. It is down and this is urgent for our client demo.\"\n },\n {\n  \"id\": \"T-1007\",\n  \"customer\": \"Meera Nair\",\n  \"subject\": \"Invoice copy needed\",\n  \"message\": \"Could you please send a copy of last month's invoice for our records?\"\n },\n {\n  \"id\": \"T-1008\",\n  \"customer\": \"Arjun Reddy\",\n  \"subject\": \"Worst shipping experience\",\n  \"message\": \"Delivery was late and the package arrived damaged. Terrible service, I want a refund.\"\n },\n {\n  \"id\": \"T-1009\",\n  \"customer\": \"Divya Joshi\",\n  \"subject\": \"Feature question\",\n  \"message\": \"How do I export my data to a spreadsheet? I love the product so far.\"\n },\n {\n  \"id\": \"T-1010\",\n  \"customer\": \"Rohan Gupta\",\n  \"subject\": \"Bug in report page\",\n  \"message\": \"There is an error on the report page, numbers do not match the export.\"\n },\n {\n  \"id\": \"T-1011\",\n  \"customer\": \"Neha Kapoor\",\n  \"subject\": \"Update my email\",\n  \"message\": \"Please update the email on my account to my new address.\"\n },\n {\n  \"id\": \"T-1012\",\n  \"customer\": \"Aditya Rao\",\n  \"subject\": \"Payment failed\",\n  \"message\": \"My payment failed twice and I am worried my subscription will stop. Please check.\"\n }\n];\nreturn tickets.map(t => ({ json: t }));"
+      },
+      "id": "n2",
+      "name": "Load Tickets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const NEG = ['angry','terrible','worst','unacceptable','frustrated','not working','crash','damaged','late','worried','down','refund','failed','error'];\nconst POS = ['thanks','great','love','helpful','happy','awesome'];\nconst CATS = {\n  Billing:   ['invoice','refund','charge','charged','payment','subscription'],\n  Technical: ['error','crash','bug','not working','login','dashboard','down'],\n  Account:   ['password','account','access','email'],\n  Shipping:  ['delivery','shipping','order','package','arrived']\n};\nconst out = [];\nfor (const item of $input.all()) {\n  const t = item.json;\n  const text = (t.subject + ' ' + t.message).toLowerCase();\n  const neg = NEG.filter(w => text.includes(w)).length;\n  const pos = POS.filter(w => text.includes(w)).length;\n  const sentiment = neg > pos ? 'Negative' : pos > neg ? 'Positive' : 'Neutral';\n  let category = 'General';\n  let best = 0;\n  for (const [name, words] of Object.entries(CATS)) {\n    const hits = words.filter(w => text.includes(w)).length;\n    if (hits > best) { best = hits; category = name; }\n  }\n  const urgent = text.includes('urgent') || text.includes('down');\n  let priority = 'Low';\n  if (urgent || (sentiment === 'Negative' && (category === 'Billing' || category === 'Technical') && neg >= 2)) priority = 'High';\n  else if (sentiment === 'Negative' || category === 'Billing' || category === 'Technical') priority = 'Medium';\n  out.push({ json: { ...t, sentiment, category, priority } });\n}\nreturn out;"
+      },
+      "id": "n3",
+      "name": "Analyze Tickets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "c-High",
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": "High",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renamedOutput": "High"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "c-Medium",
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": "Medium",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renamedOutput": "Medium"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "c-Low",
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": "Low",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renamedOutput": "Low"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n4",
+      "name": "Route by Priority",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        660,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "n5a",
+              "name": "team",
+              "value": "Senior Support",
+              "type": "string"
+            },
+            {
+              "id": "n5b",
+              "name": "action",
+              "value": "Escalate immediately and call the customer",
+              "type": "string"
+            },
+            {
+              "id": "n5c",
+              "name": "sla_hours",
+              "value": 2,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "n5",
+      "name": "High Priority Plan",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        900,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "n6a",
+              "name": "team",
+              "value": "Support Team",
+              "type": "string"
+            },
+            {
+              "id": "n6b",
+              "name": "action",
+              "value": "Reply with a fix or workaround",
+              "type": "string"
+            },
+            {
+              "id": "n6c",
+              "name": "sla_hours",
+              "value": 8,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "n6",
+      "name": "Medium Priority Plan",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "n7a",
+              "name": "team",
+              "value": "Self-service Queue",
+              "type": "string"
+            },
+            {
+              "id": "n7b",
+              "name": "action",
+              "value": "Send help article or template reply",
+              "type": "string"
+            },
+            {
+              "id": "n7c",
+              "name": "sla_hours",
+              "value": 48,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "n7",
+      "name": "Low Priority Plan",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        900,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "n8",
+      "name": "Combine Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1140,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map(i => i.json);\nconst order = { High: 0, Medium: 1, Low: 2 };\nitems.sort((a, b) => order[a.priority] - order[b.priority] || a.id.localeCompare(b.id));\nconst esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst count = (key) => items.reduce((m, i) => (m[i[key]] = (m[i[key]] || 0) + 1, m), {});\nconst byPriority = count('priority'), byCategory = count('category'), bySentiment = count('sentiment');\nconst total = items.length;\nconst bars = (obj) => Object.entries(obj).map(([k, v]) =>\n  `<div class=\"row\"><span class=\"lab\">${esc(k)}</span><span class=\"bar\" style=\"width:${Math.round(v / total * 100) * 3}px\"></span><span class=\"num\">${v}</span></div>`).join('');\nconst rows = items.map(i => `<tr class=\"${i.priority.toLowerCase()}\"><td>${esc(i.id)}</td><td>${esc(i.customer)}</td><td>${esc(i.subject)}</td><td>${esc(i.category)}</td><td>${esc(i.sentiment)}</td><td><b>${esc(i.priority)}</b></td><td>${esc(i.team)}</td><td>${esc(i.action)}</td><td>${i.sla_hours}h</td></tr>`).join('');\nconst date = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });\nconst html = `<!doctype html><html><head><meta charset=\"utf-8\"><title>Support Triage Report</title><style>\nbody{font-family:Arial,sans-serif;color:#222;max-width:1100px;margin:30px auto;padding:0 20px}\nh1{color:#1f3a5f;margin-bottom:0}.sub{color:#666;margin-top:4px}\n.cards{display:flex;gap:14px;margin:20px 0}.card{flex:1;border:1px solid #ddd;border-radius:8px;padding:14px}\n.card h2{margin:0;font-size:30px;color:#1f3a5f}.card p{margin:4px 0 0;color:#666}\n.row{display:flex;align-items:center;gap:8px;margin:4px 0}.lab{width:90px}.bar{height:14px;background:#1f3a5f;border-radius:3px}\n.grid{display:flex;gap:30px}.grid>div{flex:1}\ntable{border-collapse:collapse;width:100%;font-size:13px;margin-top:10px}th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}\nth{background:#1f3a5f;color:#fff}tr.high{background:#fdecea}tr.medium{background:#fff7e0}tr.low{background:#eef7ee}\n</style></head><body>\n<h1>Support Ticket Triage Report</h1><p class=\"sub\">Generated ${date}</p>\n<div class=\"cards\">\n<div class=\"card\"><h2>${total}</h2><p>Total tickets</p></div>\n<div class=\"card\"><h2>${byPriority.High || 0}</h2><p>High priority</p></div>\n<div class=\"card\"><h2>${bySentiment.Negative || 0}</h2><p>Unhappy customers</p></div>\n<div class=\"card\"><h2>${byPriority.Low || 0}</h2><p>Low priority</p></div></div>\n<div class=\"grid\"><div><h3>By priority</h3>${bars(byPriority)}</div><div><h3>By category</h3>${bars(byCategory)}</div><div><h3>By sentiment</h3>${bars(bySentiment)}</div></div>\n<h3>All tickets (most urgent first)</h3>\n<table><tr><th>ID</th><th>Customer</th><th>Subject</th><th>Category</th><th>Sentiment</th><th>Priority</th><th>Assigned to</th><th>Action</th><th>Reply within</th></tr>${rows}</table>\n</body></html>`;\nconst bin = await this.helpers.prepareBinaryData(Buffer.from(html, 'utf8'), 'support-triage-report.html', 'text/html');\nreturn [{ json: { total, byPriority, byCategory, bySentiment, tip: 'Open the Binary tab and download support-triage-report.html' }, binary: { data: bin } }];"
+      },
+      "id": "n9",
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Tickets": {
+      "main": [
+        [
+          {
+            "node": "Analyze Tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Tickets": {
+      "main": [
+        [
+          {
+            "node": "Route by Priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Priority": {
+      "main": [
+        [
+          {
+            "node": "High Priority Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Medium Priority Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Low Priority Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "High Priority Plan": {
+      "main": [
+        [
+          {
+            "node": "Combine Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Medium Priority Plan": {
+      "main": [
+        [
+          {
+            "node": "Combine Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Low Priority Plan": {
+      "main": [
+        [
+          {
+            "node": "Combine Results",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Combine Results": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
